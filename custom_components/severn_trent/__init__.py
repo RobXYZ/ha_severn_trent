@@ -11,7 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import SevernTrentAPI, AuthenticationError, APIError
-from .statistics import WaterStatistics, usage_pattern
+from .statistics import HourlyWaterStatistics, WaterStatistics, usage_pattern
 from .const import (
     CONF_ACCOUNT_NUMBER,
     CONF_API_KEY,
@@ -75,6 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
     
     history = WaterStatistics(hass, entry, api)
+    hourly_history = HourlyWaterStatistics(hass, entry, api)
 
     async def async_update_data():
         """Fetch data from API."""
@@ -139,10 +140,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             if smart_data and api.capability_type not in ("VISUAL", "MANUAL"):
                 await history.async_update()
+                await hourly_history.async_update()
 
             # Combine both datasets
             return {
                 "history": history.status,
+                "hourly_history": hourly_history.status,
                 "usage_pattern": usage_pattern((history.cache or {}).get("days", {})),
                 "smart_meter": smart_data,
                 "manual_meter": manual_data,
@@ -187,6 +190,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "api": api,
         "history": history,
+        "hourly_history": hourly_history,
     }
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -430,6 +430,10 @@ class SevernTrentAPI:
             # Fetch from previous Monday (14 days back minimum) to ensure we have all data
             start_date = datetime.combine(previous_week_monday, datetime.min.time(), WATER_TIME_ZONE)
 
+            # The supplier omits the final hour of the last day in a DAY_INTERVAL
+            # window, so request one day more and discard today's partial bucket.
+            request_end = end_date + timedelta(days=1)
+
             _LOGGER.info("Fetching daily readings from %s to %s (covers current + previous week)", start_date, end_date)
             
             headers = {
@@ -446,7 +450,7 @@ class SevernTrentAPI:
                     "variables": {
                         "accountNumber": self.account_number,
                         "startAt": _api_dt(start_date),
-                        "endAt": _api_dt(end_date),
+                        "endAt": _api_dt(request_end),
                         "utilityFilters": [{
                             "waterFilters": {
                                 "readingFrequencyType": "DAY_INTERVAL",
@@ -491,7 +495,7 @@ class SevernTrentAPI:
                         "variables": {
                             "accountNumber": self.account_number,
                             "startAt": _api_dt(start_date),
-                            "endAt": _api_dt(end_date),
+                            "endAt": _api_dt(request_end),
                             "utilityFilters": [
                                 {
                                     "waterFilters": {
@@ -642,7 +646,8 @@ class SevernTrentAPI:
 
                 if start_at:
                     date_str = _reading_date(start_at)
-                    daily_totals[date_str] = value
+                    if date_str < today.isoformat():
+                        daily_totals[date_str] = value
 
             _LOGGER.debug("Daily totals: %s", daily_totals)
 
@@ -715,7 +720,7 @@ class SevernTrentAPI:
                                 "variables": {
                                     "accountNumber": self.account_number,
                                     "startAt": _api_dt(official_dt),
-                                    "endAt": _api_dt(partial_month_end),
+                                    "endAt": _api_dt(partial_month_end + timedelta(days=1)),
                                     "utilityFilters": [{
                                         "waterFilters": {
                                             "readingFrequencyType": "DAY_INTERVAL",
@@ -746,6 +751,8 @@ class SevernTrentAPI:
                                     start_at = node.get("startAt")
                                     if start_at:
                                         date_str = _reading_date(start_at)
+                                        if date_str >= partial_month_end.date().isoformat():
+                                            continue
                                         daily_readings_since_official.append({
                                             "value": round(value, 3),
                                             "date": date_str,
@@ -1489,6 +1496,51 @@ class SevernTrentAPI:
                     raise APIError("Conflicting readings for selected meter")
                 days[day] = value
         return days
+
+    def get_hourly_history(self, start: str, end: str) -> dict[str, float]:
+        """Fetch hourly volumes for UK dates [start, end), keyed by UTC hour start."""
+        self._ensure_valid_token()
+        if not self._fetch_meter_identifiers():
+            return {}
+        start_dt = datetime.fromisoformat(start).replace(tzinfo=WATER_TIME_ZONE)
+        end_dt = datetime.fromisoformat(end).replace(tzinfo=WATER_TIME_ZONE)
+        response = self._post(
+            API_URL, timeout=REQUEST_TIMEOUT, headers={"Authorization": self.token},
+            json={"query": SMART_METER_READINGS_QUERY, "operationName": "SmartMeterReadings",
+                  "variables": {"accountNumber": self.account_number,
+                                "startAt": _api_dt(start_dt), "endAt": _api_dt(end_dt),
+                                "utilityFilters": [{"waterFilters": {
+                                    "readingFrequencyType": "HOUR_INTERVAL",
+                                    "marketSupplyPointId": self.market_supply_point_id,
+                                    "deviceId": self.device_id,
+                                    "excludeHeld": True, "excludeQuarantined": True}}]}},
+        )
+        account = (response.json().get("data") or {}).get("account")
+        if not account:
+            raise APIError("Account history unavailable")
+        hours = {}
+        for prop in account.get("properties", []):
+            connection = prop.get("measurements") or {}
+            edges = connection.get("edges", [])
+            if connection.get("pageInfo", {}).get("hasNextPage") or len(edges) >= 1000:
+                raise APIError("Hourly history response was truncated")
+            for edge in edges:
+                node = edge.get("node") or {}
+                if not node.get("startAt") or not node.get("endAt"):
+                    continue
+                hour_start = datetime.fromisoformat(node["startAt"]).astimezone(timezone.utc)
+                if not start_dt <= hour_start < end_dt:
+                    continue
+                hour_end = datetime.fromisoformat(node["endAt"]).astimezone(timezone.utc)
+                if hour_end - hour_start != timedelta(hours=1) or hour_start != hour_start.replace(
+                        minute=0, second=0, microsecond=0):
+                    raise APIError("Hourly history contains a non-hourly interval")
+                value = _water_volume(node)
+                key = hour_start.isoformat()
+                if key in hours and abs(hours[key] - value) > 0.000001:
+                    raise APIError("Conflicting readings for selected meter")
+                hours[key] = value
+        return hours
 
     def get_available_meters(self) -> list[dict[str, Any]]:
         """List meters across all linked properties for explicit selection."""

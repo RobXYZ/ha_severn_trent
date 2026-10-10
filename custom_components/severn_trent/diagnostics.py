@@ -10,6 +10,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
     data = coordinator.data or {}
     smart = data.get('smart_meter') or {}
     history = data.get('history') or {}
+    hourly = data.get('hourly_history') or {}
     return {
         'last_update_success': coordinator.last_update_success,
         'capability_type': (data.get('meter_info') or {}).get('capability_type'),
@@ -19,6 +20,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
         'history': {key: history.get(key) for key in (
             'status', 'days_imported', 'latest_day', 'missing_recent_days',
             'backfill_start', 'backfill_cursor')},
+        'hourly_history': {key: hourly.get(key) for key in (
+            'status', 'hours_imported', 'latest_hour', 'backfill_start', 'backfill_cursor')},
         'datasets_available': {key: bool(data.get(key)) for key in (
             'smart_meter', 'manual_meter', 'balance', 'payment_schedule', 'next_payment')},
     }

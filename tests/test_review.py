@@ -269,7 +269,8 @@ def test_utc_daily_boundary_is_assigned_to_the_correct_bst_day(authenticated_api
     assert result["daily_average"] == 1
     assert result["yesterday_usage"] == 1
     variables = post.call_args_list[0].kwargs["json"]["variables"]
-    assert variables["endAt"] == "2026-09-12T23:00:00Z"
+    # One day beyond today's midnight: the supplier omits the final hour of the window's last day.
+    assert variables["endAt"] == "2026-09-13T23:00:00Z"
 
 
 @pytest.mark.parametrize("sensor_type,value_key,date_key,old_value,new_value,expected_growth", [

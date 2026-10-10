@@ -812,7 +812,7 @@ class SevernTrentLatestDailySensor(SevernTrentBaseSensor):
 
 
 class SevernTrentHistorySensor(SevernTrentBaseSensor):
-    """Expose import progress and the Energy Dashboard statistic identifier."""
+    """Expose import progress and the Energy Dashboard statistic identifiers."""
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, account_number):
@@ -822,8 +822,15 @@ class SevernTrentHistorySensor(SevernTrentBaseSensor):
 
     def _handle_coordinator_update(self):
         history = (self.coordinator.data or {}).get("history") or {}
+        hourly = (self.coordinator.data or {}).get("hourly_history") or {}
         self._attr_native_value = history.get("status", "no_daily_data")
-        self._attr_extra_state_attributes = history
+        self._attr_extra_state_attributes = {
+            **history,
+            "hourly_status": hourly.get("status", "no_hourly_data"),
+            "hourly_statistic_id": hourly.get("statistic_id"),
+            "hours_imported": hourly.get("hours_imported"),
+            "latest_hour": hourly.get("latest_hour"),
+        }
         super()._handle_coordinator_update()
 
 

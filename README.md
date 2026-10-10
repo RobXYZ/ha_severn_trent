@@ -340,13 +340,22 @@ Note: Smart meter data has a delay - hourly readings aren't available immediatel
 
 ## Energy Dashboard Integration
 
-In **Settings → Dashboards → Energy → Water consumption**, select **Severn Trent daily water (your meter serial)**. This is an external statistic, not a sensor entity. The **Water history status** diagnostic sensor exposes its exact `statistic_id` and import progress.
+The integration imports two external statistics for each smart meter. They are statistics, not sensor entities:
 
-Use one source per physical meter. When switching from Yesterday Usage or Week to Date, remove that old water source from the dashboard to avoid double counting. The integration does not change dashboard settings or erase existing statistics automatically.
+| Statistic | What it holds | Choose it when |
+|---|---|---|
+| **Severn Trent hourly water (your meter serial)** | Each hourly reading at the hour it was used | You want to see when water was used, for example to match it to appliances |
+| **Severn Trent daily water (your meter serial)** | Each day's total, placed in the day's final hour | Your meter supplies daily totals only, or you already use it and are happy with daily bars |
+
+In **Settings → Dashboards → Energy → Water consumption**, select **one** of them. Both describe the same water, so adding both doubles your consumption. The **Water history status** diagnostic sensor exposes both identifiers (`statistic_id` and `hourly_statistic_id`) and import progress (`days_imported`, `hours_imported`, `latest_hour`).
+
+Use one source per physical meter. When switching from Yesterday Usage, Week to Date or the daily statistic, remove the old water source from the dashboard to avoid double counting. The integration does not change dashboard settings or erase existing statistics automatically.
+
+Hourly readings are published late, typically a day or more after use, and a day fills in as its hours arrive. The hourly statistic checks the latest 14 days on every refresh and backfills a year in 31-day windows, in the same way as the daily statistic. Hours the supplier has not published are left empty rather than estimated. If `hourly_status` stays at `no_hourly_data`, the meter does not supply hourly readings; use the daily statistic.
 
 The first refresh imports the latest 35 days and begins a one-year backfill in 31-day windows. Each hourly refresh checks recent readings and one older window; a year normally takes about 12 successful refreshes. Older windows are revisited to pick up corrections. Saved dated readings survive restarts, and corrected cumulative totals are reimported at the same timestamps. Missing supplier days are not invented; check `missing_recent_days` before relying on completeness.
 
-Consumption is assigned to its original **Europe/London calendar day**, including BST changes. Since the supplier supplies daily totals, the whole day's usage appears in its final hour. This is a daily accounting convention, **not an hourly usage profile**. Home Assistant downtime does not shift imported usage onto the restart date. History remains limited to readings Severn Trent actually supplies.
+In the daily statistic, consumption is assigned to its original **Europe/London calendar day**, including BST changes, and the whole day's usage appears in its final hour. This is a daily accounting convention, **not an hourly usage profile**; use the hourly statistic for that. Home Assistant downtime does not shift imported usage onto the restart date. History remains limited to readings Severn Trent actually supplies.
 
 Existing Yesterday Usage, Week to Date and Previous Week sensors retain their entity IDs and now declare explicit period resets. This prevents false negative reset consumption (#30), including equal totals in successive periods. Those entity histories still record when data arrives, so the dated external statistic is the recommended Energy source. Existing negative statistics are not automatically repaired: back up first and review affected entries in **Developer Tools → Statistics** if retaining an old source.
 

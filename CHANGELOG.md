@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Hourly external water statistic ("Severn Trent hourly water") that imports each hourly reading at its true hour, with the same persistent cache, one-year backfill, late-reading recovery and correction replay as the daily statistic. The daily statistic is unchanged; select only one of them in the Energy Dashboard.
+- Hourly import progress on the Water history status sensor and in diagnostics.
+
+### Fixed
+- Yesterday Usage, Week to Date and the 7-day average under-reported the most recent day by its final hour (23:00–00:00). The supplier omits that hour from the last day of a daily request window, so the request now extends one day further and today's partial bucket is discarded. The daily statistic already requested a wider window and was not affected.
+
 ## [1.9.0] - 2026-09-13
 
 ### Fixed
